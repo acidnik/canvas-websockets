@@ -1,0 +1,31 @@
+<html>
+    <head>
+        <script src="http://yandex.st/jquery/1.7.2/jquery.min.js"></script>
+        <script src="js/board.js"></script>
+        <title>Canvas</title>
+    </head>
+    <body>
+        <div id="toolbar">
+            <input type="button" id="clear" value="clear" />
+            <input type="button" id="pencil" value="pencil"  />
+            <input type="button" id="line" value="line"  />
+        </div>
+        <canvas width="500" height="500" id=c style="border: 1px solid black"></canvas>
+        <script>
+            var board = new Board('#c');
+
+            $('#clear').click(function(){
+                var old_tool = board.tool;
+                board.setTool(Clear);
+                board.tool.end();
+                board.tool = old_tool;
+            });
+            $('#pencil').click(function(){
+                board.setTool(Pencil);
+            });
+            $('#line').click(function(){
+                board.setTool(Line);
+            });
+        </script>
+    </body>
+</html>

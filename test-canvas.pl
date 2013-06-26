@@ -6,6 +6,11 @@ app->secret('1Y8+yLpkVo+VIRm/SSEsl0seCa840gOs');
 
 my %clients = ();
 
+get '/' => sub {
+    my $self = shift;
+    $self->render_static('test-canvas.html');
+} => 'index';
+
 websocket '/d' => sub {
     my $self = shift;
     my $id = sprintf("%s", $self->tx);
