@@ -19,6 +19,10 @@ websocket '/d' => sub {
     my $json = new Mojo::JSON;
     $self->on(message => sub {
         my ($self, $data) = @_;
+        if ($data eq 'ping') {
+            $self->send('pong');
+            return;
+        }
         app->log->debug("in: $data");
         $data = $json->decode($data);
         for my $cl (keys %clients) {

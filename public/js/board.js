@@ -171,22 +171,57 @@ Board.prototype.initMouseEvents = function() {
 
 Board.prototype.initSocket = function() {
     var _this = this;
-    this.socket = new WebSocket('ws://localhost:3000/d');
-    this.socket.onopen = function (){
-        console.log("websocket connected");
-        _this.setTool(Line, this);
-    };
-    this.socket.oncolose = function(){
-        console.log("websocket closed");
-    };
-    this.socket.onmessage = function(msg){
-        console.log(msg.data);
-        var data = $.parseJSON(msg.data);
-        if (typeof(data.tool) !== "undefined") {
-            var tool = new window[data.tool](_this.el, _this.socket);
-            tool.draw_points(data.points);
+    try {
+        this.socket = new WebSocket('ws://localhost:3000/d');
+        this.socket.onopen = function (){
+            console.log("websocket connected");
+            if (typeof(_this.tool) === "undefined")
+                _this.setTool(Line, this);
+        };
+        this.socket.onclose = function(){
+            console.log("websocket closed");
+            _this.initSocket();
+        };
+        this.socket.onmessage = function(msg){
+            if (msg.data == "pong") {
+                _this.ping_time = Date.now();
+                return;
+            }
+            console.log([ 'in', msg.data ]);
+            var data = $.parseJSON(msg.data);
+            if (typeof(data.tool) !== "undefined") {
+                var tool = new window[data.tool](_this.el, _this.socket);
+                tool.draw_points(data.points);
+            }
+        };
+    }
+    catch (e) {
+        console.log([ 'websocket failed to connect', e.message ]);
+    }
+    _this.initTimers();
+}
+
+Board.prototype.initTimers = function() {
+    var _this = this;
+    this.ping_time = Date.now();
+    var ping_t = 2000;
+    this.ping_timer = setInterval(function() {
+        try {
+            _this.socket.send("ping");
         }
-    };
+        catch(e) {
+        }
+    }, ping_t);
+    this.alive_timer = setInterval(function() {
+        if ( Date.now() - _this.ping_time > 2*ping_t ) {
+            console.log('whoa, reconnect!');
+            clearTimeout(_this.ping_timer);
+            clearTimeout(_this.alive_timer);
+            _this.socket.close();
+            delete _this.socket;
+            _this.initSocket();
+        }
+    }, 2*ping_t);
 }
 
 Board.prototype.setTool = function(tool) {
