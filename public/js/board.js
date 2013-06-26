@@ -177,6 +177,7 @@ Board.prototype.initSocket = function() {
             console.log("websocket connected");
             if (typeof(_this.tool) === "undefined")
                 _this.setTool(Line, this);
+            _this.initTimers();
         };
         this.socket.onclose = function(){
             console.log("websocket closed");
@@ -198,7 +199,6 @@ Board.prototype.initSocket = function() {
     catch (e) {
         console.log([ 'websocket failed to connect', e.message ]);
     }
-    _this.initTimers();
 }
 
 Board.prototype.initTimers = function() {
@@ -214,7 +214,7 @@ Board.prototype.initTimers = function() {
     }, ping_t);
     this.alive_timer = setInterval(function() {
         if ( Date.now() - _this.ping_time > 2*ping_t ) {
-            console.log('whoa, reconnect!');
+            console.log('ping timeout');
             clearTimeout(_this.ping_timer);
             clearTimeout(_this.alive_timer);
             _this.socket.close();

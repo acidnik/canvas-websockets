@@ -13,7 +13,7 @@ get '/' => sub {
 
 websocket '/d' => sub {
     my $self = shift;
-    my $id = sprintf("%s", $self->tx);
+    my $id = sprintf("%s:%s", $self->tx->remote_address, $self->tx->remote_port);
     app->log->debug("got client $id");
     $clients{$id} = $self->tx;
     my $json = new Mojo::JSON;
@@ -26,7 +26,7 @@ websocket '/d' => sub {
         app->log->debug("in: $data");
         $data = $json->decode($data);
         for my $cl (keys %clients) {
-            next if $cl eq ''.$self->tx;
+            next if $cl eq $id;
             app->log->debug("sending to $cl");
             $clients{$cl}->send($json->encode($data));
         }
@@ -38,4 +38,5 @@ websocket '/d' => sub {
     });
 };
 
+$ENV{MOJO_INACTIVITY_TIMEOUT} = 0;
 app->start;
