@@ -1,0 +1,227 @@
+<html>
+    <head>
+        <script src="http://yandex.st/jquery/1.7.2/jquery.min.js"></script>
+        <script src="/home/icenine/projects/jquery-number/jquery.min.js"></script>
+        <title>Canvas</title>
+    </head>
+    <body>
+        <div id="toolbar">
+            <input type="button" id="clear" value="clear" />
+            <input type="button" id="pencil" value="pencil"  />
+            <input type="button" id="line" value="line"  />
+        </div>
+        <canvas width="500" height="500" id=c style="border: 1px solid black"></canvas>
+        <script>
+            function extend(Child, Parent) {
+                var F = function() { };
+                F.prototype = Parent.prototype;
+                Child.prototype = new F();
+                Child.prototype.constructor = Child;
+                Child.superclass = Parent.prototype;
+            }
+
+            // ************** Tool 
+            function Tool(canvas, socket, opt) {
+                this.c = canvas;
+                this.color = '#000000'; // TODO
+                this.ctx = this.c[0].getContext('2d');
+                var _this = this;
+                if (typeof opt === "undefined" || 
+                    typeof opt['bind'] === "undefined" || opt['bind']) 
+                {
+                    this.c.mousedown(function(e) {
+                        var x = e.pageX - this.offsetLeft,
+                            y = e.pageY - this.offsetTop;
+                        _this.begin(x,y);
+                        return false;
+                    });
+                    this.c.mousemove(function(e) {
+                        var x = e.pageX - this.offsetLeft,
+                            y = e.pageY - this.offsetTop;
+                        _this.move(x,y);
+                        return false;
+                    });
+                    this.c.mouseup(function(e) {
+                        var x = e.pageX - this.offsetLeft,
+                            y = e.pageY - this.offsetTop;
+                        _this.end(x,y);
+                        return false;
+                    });
+                }
+                this.drawing = false;
+                this.width = this.c.width();
+                this.height = this.c.height();
+                this.socket = socket;
+                return this;
+            }
+
+            Tool.prototype.draw_points = function(points) {
+                // overload this
+            }
+
+            Tool.prototype.begin = function (x,y) {
+                this.drawing = true;
+            }
+
+            Tool.prototype.end = function() {
+                this.drawing = false;
+                var command = this.command();
+                command.tool = ""+this.constructor;
+                command.tool = command.tool.replace(/\n+/,'','g');
+                command.tool = command.tool.replace(/\n+/,'','g');
+                command.tool = command.tool.replace(/function\s+([^\(]+)\(.*/, "$1", "gs");
+                console.log(['send:', JSON.stringify(command)]);
+                this.socket.send(JSON.stringify(command));
+            }
+
+            Tool.prototype.move = function(x,y) {
+                if (!this.drawing) {
+                    return true;
+                }
+            }
+            Tool.prototype.command = function() {
+                // method to send draw data to socket
+            }
+
+            // ********** Pencil
+            function Pencil(canvas) {
+                Pencil.superclass.constructor.apply(this, arguments);
+            };
+            extend(Pencil, Tool);
+            Pencil.prototype.begin = function(x,y) {
+                Pencil.superclass.begin.call(this,x,y);
+                this.lastx = x;
+                this.lasty = y;
+                this.points = [ [x,y] ];
+            }
+            Pencil.prototype.move = function(x,y) {
+                if (!this.drawing) return true;
+                this.ctx.beginPath();
+                this.ctx.moveTo(this.lastx, this.lasty);
+                this.ctx.lineTo(x,y);
+                this.ctx.stroke();
+                this.lastx = x;
+                this.lasty = y;
+                this.points.push([x,y]);
+                return true;
+            }
+            Pencil.prototype.command = function() {
+                return {
+                    points: this.points
+                };
+            }
+            Pencil.prototype.draw_points = function(points) {
+                var i = points.length-1;
+                this.ctx.beginPath();
+                while (i--) {
+                    this.ctx.moveTo(points[i+1][0], points[i+1][1]);
+                    this.ctx.lineTo(points[i][0], points[i][1]);
+                }
+                this.ctx.stroke();
+            }
+
+            // ************ Line
+            function Line(canvas) {
+                Line.superclass.constructor.apply(this, arguments);
+            }
+            extend(Line, Tool);
+            Line.prototype.begin = function(x,y) {
+                Line.superclass.begin.call(this,x,y);
+                this.startx = x;
+                this.starty = y;
+                this.base = this.ctx.getImageData(0,0,this.width, this.height);
+                this.points = [ [x,y] ];
+            }
+            Line.prototype.move = function(x,y) {
+                if (!this.drawing) return true;
+                this.lastx = x;
+                this.lasty = y;
+                this.ctx.beginPath();
+                this.ctx.putImageData(this.base, 0,0);
+                this.ctx.moveTo(x,y);
+                this.ctx.lineTo(this.startx, this.starty);
+                this.ctx.stroke();
+            }
+            Line.prototype.end = function(x,y) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(this.startx, this.starty);
+                this.ctx.lineTo(x,y);
+                this.ctx.stroke();
+                this.points.push( [x,y] );
+                Line.superclass.end.call(this,x,y);
+            }
+            Line.prototype.command = function() {
+                return {
+                    points: this.points
+                };
+            }
+            Line.prototype.draw_points = function(points) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(points[0][0], points[0][1]);
+                this.ctx.lineTo(points[1][0], points[1][1]);
+                this.ctx.stroke();
+            }
+
+            // *********** Clear
+            function Clear() {
+                Clear.superclass.constructor.call(this, arguments[0], arguments[1], {bind: false});
+                this.ctx.fillRect(0,0,this.width, this.height);
+                this.end();
+            }
+            extend(Clear, Tool)
+            Clear.command = function() {
+                return {};
+            }
+            Clear.draw_points = function() {
+                this.ctx.fillRect(0,0,this.width, this.height);
+            }
+            
+            // **************** Board
+            function Board(element) {
+                this.el = $(element);
+                this.ctx = this.el[0].getContext('2d');
+                this.socket = new WebSocket('ws://localhost:3000/d');
+                var _this = this;
+                this.socket.onopen = function (){
+                    console.log("websocket connected");
+                    _this.setTool(Line, this);
+                };
+                this.socket.oncolose = function(){
+                    console.log("websocket closed");
+                };
+                this.socket.onmessage = function(msg){
+                    console.log(msg.data);
+                    var data = $.parseJSON(msg.data);
+                    if (typeof(data.tool) !== "undefined") {
+                        var old_tool = this.tool;
+                        var tool = new window[data.tool](_this.el, _this.socket, {
+                            bind: false
+                        });
+                        tool.draw_points(data.points);
+                        board.tool = old_tool;
+                    }
+                };
+            }
+            Board.prototype.setTool = function(tool) {
+                this.el.unbind('mousemove mouseup mousedown');
+                this.tool = new tool(this.el, this.socket);
+            }
+            Board.prototype.clear = function() {
+                this.ctx.clearRect(0,0,this.el.width(), this.el.height());
+            }
+
+            var board = new Board('#c');
+
+            $('#clear').click(function(){
+                //board.setTool(Clear);
+                
+            });
+            $('#pencil').click(function(){
+                board.setTool(Pencil);
+            });
+            $('#line').click(function(){
+                board.setTool(Line);
+            });
+        </script>
+    </body>
+</html>
